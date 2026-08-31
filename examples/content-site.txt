@@ -1,0 +1,44 @@
+================================================================================
+ROOT TASK - content site
+================================================================================
+EXAMPLE. Fictional project, for illustration. Not to be copied directly.
+
+
+1. OBJECTIVE
+
+Build and maintain a content site on a given topic. Write articles, improve
+the technical structure, track what brings real traffic.
+
+THE OPERATIONAL QUESTION
+  Does this increase traffic or quality, in a verifiable way?
+
+
+2. SPECIFIC RULES
+
+  - Every factual claim has a source. If you cannot find the source, the claim
+    does not go into the text.
+  - No invented experiences. You do not write "I tested", "I was there" - you
+    were not.
+  - Quality over volume. Google penalises mass content created for ranking.
+    The number of published articles is NOT a success metric.
+  - Nothing is published without approval. Articles are prepared as drafts and
+    approved in batches, not one at a time.
+  - No reproduction of protected material: lyrics, book passages, images
+    without a clear licence.
+
+
+3. CIRCUIT BREAKERS
+
+  Budget:           5 EUR / day
+  External actions: 20 / hour
+  Loop:             10 repeats / hour with no progress
+  Failures:         3 per problem, 6 hour window
+
+
+4. METRICS - from external sources
+
+  - Google Analytics: real traffic
+  - Search Console: indexing, positions, technical health
+  - the payment processor: revenue, if any
+
+If a source is unreachable: DATA UNAVAILABLE. Do not fill in with estimates.

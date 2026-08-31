@@ -1,0 +1,36 @@
+#cloud-config
+#
+# Configuration applied on the VM's first boot.
+#
+# SKELETON - unvalidated. For now it assumes a Debian cloud image; if another
+# provisioning path is chosen, this file goes away. See README, Open questions.
+
+hostname: {{.Name}}
+
+package_update: true
+packages:
+  - git
+  - build-essential
+
+write_files:
+  # the virtiofs mounts, with the permissions decided on the host
+  - path: /etc/fstab
+    append: true
+    content: |
+      {{range .Mounts}}
+      {{.Tag}}  {{.GuestPath}}  virtiofs  {{if .ReadOnly}}ro{{else}}rw{{end}},defaults  0 0
+      {{end}}
+
+  # all traffic goes through the proxy on the host
+  - path: /etc/environment
+    append: true
+    content: |
+      http_proxy={{.ProxyURL}}
+      https_proxy={{.ProxyURL}}
+      no_proxy=localhost,127.0.0.1
+
+runcmd:
+  - mkdir -p /mnt/ops /workspace
+  - mount -a
+  # TODO: install the pixelgo binary into /usr/local/bin
+  # TODO: start the agent, but only if rules/ is not empty

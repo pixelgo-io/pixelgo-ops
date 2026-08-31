@@ -1,0 +1,52 @@
+================================================================================
+ROOT TASK - csvfast library
+================================================================================
+EXAMPLE. Fictional project, for illustration. Not to be copied directly.
+
+Only the completed sections are reproduced here.
+
+
+1. OBJECTIVE
+
+Maintain the "csvfast" library: keep the test suite green, resolve the issues
+reported by users, and keep parse time under 200ms for the 100 MB reference
+file.
+
+Do not add new features without approval. The priority is stability, not
+expansion.
+
+THE OPERATIONAL QUESTION
+  Does this solve a real problem for someone using the library, or does it
+  just produce activity?
+
+
+2. SPECIFIC RULES
+
+  - No public API changes without approval, not even compatible ones.
+    Users depend on stable signatures.
+  - No new dependencies. The library is zero-dependency and that is a promise
+    made to its users.
+  - No automated replies to issues. You may analyse them and prepare a draft,
+    but a message to a human is sent by the operator.
+
+
+3. CIRCUIT BREAKERS
+
+  Budget:           3 EUR / day
+  External actions: 10 / hour
+  Loop:             10 repeats / hour with no progress
+  Failures:         3 per problem, 6 hour window
+
+
+4. METRICS - from external sources
+
+  - GitHub: issues opened by outside users, time to resolution
+  - npm: weekly downloads
+  - CI: test pass rate, build time
+  - the reference benchmark, on the same 100 MB file
+
+NOT metrics: number of commits, lines written, features added, changelog
+length.
+
+One issue resolved for a real user is worth more than a hundred refactoring
+commits nobody asked for.

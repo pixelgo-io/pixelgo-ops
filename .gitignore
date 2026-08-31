@@ -1,0 +1,5 @@
+pixelgo-ops
+pixelgo-ops.exe
+dist/
+*.qcow2
+*.vhdx

@@ -1,0 +1,60 @@
+<!--
+  Template for the libvirt domain, used on Linux.
+
+  SKELETON - unvalidated. The structure is right as an idea, the exact values
+  will be adjusted on the first real run.
+
+  What matters here: every <filesystem> containing <readonly/> becomes a
+  directory the VM cannot modify, not even as root. The restriction lives in
+  this file, which lives on the host and does not exist inside the VM.
+-->
+<domain type="kvm">
+  <name>{{.Name}}</name>
+  <memory unit="MiB">{{.MemoryMB}}</memory>
+  <vcpu>{{.CPUs}}</vcpu>
+
+  <os>
+    <type arch="x86_64" machine="q35">hvm</type>
+    <boot dev="hd"/>
+  </os>
+
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+
+  <cpu mode="host-passthrough"/>
+
+  <!-- virtiofs needs shared memory -->
+  <memoryBacking>
+    <source type="memfd"/>
+    <access mode="shared"/>
+  </memoryBacking>
+
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2"/>
+      <source file="{{.DiskPath}}"/>
+      <target dev="vda" bus="virtio"/>
+    </disk>
+
+    {{range .Mounts}}
+    <filesystem type="mount" accessmode="passthrough">
+      <driver type="virtiofs"/>
+      <source dir="{{.HostPath}}"/>
+      <target dir="{{.Tag}}"/>
+      {{if .ReadOnly}}<readonly/>{{end}}
+    </filesystem>
+    {{end}}
+
+    <!-- isolated network: no NAT, no direct outbound path -->
+    <interface type="network">
+      <source network="{{.Network}}"/>
+      <model type="virtio"/>
+    </interface>
+
+    <console type="pty"/>
+  </devices>
+</domain>
