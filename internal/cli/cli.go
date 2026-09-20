@@ -4,7 +4,14 @@
 // SKELETON - handlers return "not implemented".
 package cli
 
-import "fmt"
+import (
+	"errors"
+	"flag"
+	"fmt"
+
+	"github.com/pixelgo-io/pixelgo-ops/internal/config"
+	"github.com/pixelgo-io/pixelgo-ops/internal/ops"
+)
 
 const usage = `pixelgo-ops - isolated virtual machine for the pixelgo agent
 
@@ -64,7 +71,39 @@ func Run(args []string) error {
 
 // cmdInit creates the structure described in the README and a default
 // configuration. Runs once. Does not overwrite an existing structure.
-func cmdInit(args []string) error { return errNotImplemented("init") }
+func cmdInit(args []string) error {
+	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	dir := fs.String("dir", config.DefaultOpsDir(), "where the structure goes")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if err := ops.Init(*dir); err != nil {
+		if errors.Is(err, ops.ErrExists) {
+			// Not a failure worth an exit code: the person ran init twice, and
+			// the answer is that there is nothing to do.
+			fmt.Printf("%s is already initialised - nothing changed.\n", *dir)
+			return nil
+		}
+		return err
+	}
+
+	fmt.Printf("Created %s\n\n", *dir)
+	for _, d := range ops.AllDirs() {
+		note := "read-only in the VM"
+		if !ops.Mounted(d) {
+			note = "not mounted - the agent cannot reach it"
+		} else if ops.Dirs[d] {
+			note = "read-write in the VM"
+		}
+		fmt.Printf("  %-10s %s\n", d+"/", note)
+	}
+
+	fmt.Printf("\nNext: write the rules that govern the agent into %s/%s,\n",
+		*dir, config.DirRules)
+	fmt.Println("then run \"pixelgo-ops check\".")
+	return nil
+}
 
 // cmdCheck verifies: virtualization support, hypervisor availability, the
 // structure, permissions, and that rules/ is not empty.

@@ -96,11 +96,12 @@ HOST: /srv/pixelgo-ops/           (Windows: C:\pixelgo-ops\)
   approved/        # mounted read-only in the VM
   rejected/        # mounted read-only in the VM
   pending/         # mounted read-write
-  logs/            # mounted read-write
+  logs/            # mounted read-write — the agent's own journals
+  audit/           # NOT mounted — records *of* the agent, it cannot reach them
+    traffic        # what the agent asked for, allowed and denied
 
+  allowlist        # the permitted domains, not mounted in the VM
   proxy:           # mandatory — the VM's only route to the internet
-    allowlist      # the permitted domains, not mounted in the VM
-    logs/traffic   # what the agent asked for, allowed and denied
 
 VM (Debian, cloud image or ISO)
   # isolated network, no NAT — the only way out is the proxy on the host
@@ -160,6 +161,15 @@ intended for publication, with no keys, no paths containing your username, no
 personal data of others. A complete journal filtered before publication
 requires the filter to work perfectly every single time, forever. A journal
 written as public cannot leak what was never written into it.
+
+**audit/** — records *of* the agent, rather than *by* it: the proxy's traffic
+log, and the budget log if the credential gateway is ever built.
+
+Not mounted at all, unlike *logs/*. The distinction matters: *logs/* is the
+agent's own journal and it has to be able to write there, but a record of what
+it attempted is only evidence if it cannot edit it. The refusals in
+*audit/traffic* are the most useful thing the proxy produces — an agent that
+could truncate them would remove exactly the part worth reading.
 
 **allowlist** — the domains the agent may reach. Not mounted in the VM. The
 agent does not need to know what is permitted; it finds out by trying, and the
@@ -285,7 +295,7 @@ Allow 192.168.100.0/24
 FilterURLs On
 Filter /srv/pixelgo-ops/allowlist
 FilterDefaultDeny Yes
-LogFile "/srv/pixelgo-ops/logs/traffic"
+LogFile "/srv/pixelgo-ops/audit/traffic"
 ```
 
 **Squid** — larger, useful if you end up wanting a package cache or rate
@@ -296,7 +306,7 @@ acl vm src 192.168.100.0/24
 acl allowed dstdomain "/srv/pixelgo-ops/allowlist"
 http_access allow vm allowed
 http_access deny all
-access_log /srv/pixelgo-ops/logs/traffic
+access_log /srv/pixelgo-ops/audit/traffic
 ```
 
 Alongside the proxy, *pixelgo-ops* also puts in firewall rules that block any
@@ -305,7 +315,7 @@ directly over IP.
 
 ### Traffic auditing
 
-Every request lands in *logs/traffic*: the time, the domain, allowed or
+Every request lands in *audit/traffic*: the time, the domain, allowed or
 refused.
 
 ```bash

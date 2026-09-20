@@ -1,5 +1,10 @@
-pixelgo-ops
-pixelgo-ops.exe
+# The compiled binary in the repository root.
+#
+# Anchored with a leading slash: without it the pattern matches at any depth,
+# which also swallowed cmd/pixelgo-ops/ - the directory holding main.go - so
+# the entry point was never committed and the repository did not build.
+/pixelgo-ops
+/pixelgo-ops.exe
 dist/
 *.qcow2
 *.vhdx
