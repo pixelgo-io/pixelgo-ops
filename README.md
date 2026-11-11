@@ -496,9 +496,18 @@ has no way to follow them.
 pixelgo-ops check
 ```
 
-Checks virtualization, the hypervisor, the structure, the permissions, and
-whether *rules/* contains anything. It tells you what is missing before you
-start anything.
+Changes nothing. It tells you what is missing before you start anything, every
+problem at once rather than one per run, and exits non-zero if anything failed
+so you can use it in a script.
+
+Checked now: that the structure is there, that the configuration loads and its
+values are usable, that the allowlist file exists, and that *rules/* holds
+something — a directory of empty files counts as empty, because a file somebody
+created and never filled in is not a set of rules.
+
+Reported as not yet written: virtualization and hypervisor availability, and
+whether the proxy is installed. Those wait on the backends, and *check* says so
+rather than passing quietly on a machine where nothing could start.
 
 ---
 
