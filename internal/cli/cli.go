@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/pixelgo-io/pixelgo-ops/internal/config"
 	"github.com/pixelgo-io/pixelgo-ops/internal/ops"
@@ -105,10 +106,61 @@ func cmdInit(args []string) error {
 	return nil
 }
 
-// cmdCheck verifies: virtualization support, hypervisor availability, the
-// structure, permissions, and that rules/ is not empty.
-// Changes nothing. Reports what is missing.
-func cmdCheck(args []string) error { return errNotImplemented("check") }
+// cmdCheck reports on the environment and changes nothing.
+//
+// What it checks is in ops.RunChecks. The hypervisor and proxy checks are
+// listed as pending rather than run, because the functions behind them panic -
+// see the backend issues. They are listed anyway: a report that silently drops
+// the checks it cannot do is a report that passes on a machine where nothing
+// could start.
+//
+// Prints every line, including the ones that failed, instead of stopping at the
+// first problem. Someone running this has usually just installed the thing and
+// would rather see all three missing pieces at once than discover them one run
+// at a time.
+//
+// The failure is reported by the exit code, not by returning an error: an error
+// would print "error: ..." after a report that has already said what is wrong,
+// in more detail and with the remedy.
+func cmdCheck(args []string) error {
+	fs := flag.NewFlagSet("check", flag.ContinueOnError)
+	dir := fs.String("dir", config.DefaultOpsDir(), "where the structure is")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	results := ops.RunChecks(*dir)
+
+	fmt.Println()
+	failed := 0
+	pending := 0
+	for _, r := range results {
+		switch {
+		case r.OK:
+			fmt.Printf("  ok    %s\n", r.Name)
+		case r.Pending:
+			pending++
+			fmt.Printf("  --    %s (%s)\n", r.Name, r.Remedy)
+		default:
+			failed++
+			fmt.Printf("  FAIL  %s\n", r.Name)
+			fmt.Printf("          %s\n", r.Remedy)
+		}
+	}
+	fmt.Println()
+
+	if failed > 0 {
+		fmt.Printf("%d check(s) failed.\n", failed)
+		os.Exit(1)
+	}
+	if pending > 0 {
+		fmt.Printf("Everything that can be checked passed; %d check(s) are not written yet.\n",
+			pending)
+		return nil
+	}
+	fmt.Println("All checks passed.")
+	return nil
+}
 
 // cmdUp: creates the VM if it does not exist, attaches the mounts with the
 // correct flags, applies the firewall rules, starts the proxy, starts the VM,
