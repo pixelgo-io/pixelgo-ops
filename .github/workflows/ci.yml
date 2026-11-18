@@ -1,0 +1,63 @@
+# What stands between a broken commit and main.
+#
+# Four checks, in the order that fails fastest. Formatting and vet take seconds
+# and catch the things most likely to be wrong; the cross-build is last because
+# it is the slowest and the rarest to break.
+#
+# The actions are pinned by major tag rather than by commit. A tag can be moved,
+# so this is a smaller guarantee than a digest - acceptable here because both
+# are published by GitHub's own org, and worth knowing rather than assuming.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# The default token can write to the repository. Nothing here needs that.
+permissions:
+  contents: read
+
+# A second push to the same branch makes the first run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Read from go.mod rather than written here, so the version lives in one
+      # place and raising it is a visible edit to a file people read - not a
+      # line in a workflow nobody opens.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # gofmt reports files, it does not fail. An empty report is the pass.
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      # -race because the engine client runs an HTTP client over a socket and
+      # the watcher will poll on a timer: both are places where a data race is
+      # easy to write and almost impossible to notice by hand.
+      - name: go test
+        run: go test ./... -race
+
+      # The only check that compiles hyperv.go at all. It is behind
+      # //go:build windows, so a Linux build and the whole test suite can pass
+      # while that file does not compile. Without this step, the Windows
+      # backend is unverified code that looks verified.
+      - name: cross-build
+        run: make cross
