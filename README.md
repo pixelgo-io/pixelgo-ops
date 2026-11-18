@@ -515,9 +515,9 @@ rather than passing quietly on a machine where nothing could start.
 
 ```bash
 pixelgo-ops up               # creates and starts the VM, launches the agent
-pixelgo-ops status           # what is running, pending requests, budget spent
-pixelgo-ops logs             # follow the agent's journal
-pixelgo-ops logs --follow
+pixelgo-ops status           # what the engine says about itself
+pixelgo-ops logs             # the end of the engine's log
+pixelgo-ops logs --lines 50
 
 pixelgo-ops pending          # list the approval requests
 pixelgo-ops show <id>        # the contents of a request
@@ -527,6 +527,53 @@ pixelgo-ops reject <id>      # moves the request into rejected/
 pixelgo-ops down             # clean shutdown
 pixelgo-ops kill             # immediate stop, no cleanup
 ```
+
+Of those, `init`, `check`, `status` and `logs` are implemented. The rest return
+"not implemented" — see the issues.
+
+### Talking to the engine
+
+`status` and `logs` read from pixelgo's HTTP API over a unix socket. Both sides
+have to name the same path: `ENGINE_SOCKET` in the configuration, which defaults
+to `<OpsDir>/engine.sock`, and `PIXELGO_UNIX_SOCKET` when starting pixelgo.
+Nothing enforces the agreement yet — `check` is where that belongs once it can
+reach the engine.
+
+```
+$ pixelgo-ops status
+
+  engine socket:  /srv/pixelgo-ops/engine.sock
+  engine:         RUNNING
+  version:        20.2
+  contract:       1
+  accepting work: yes
+  vm:             not reported yet - the hypervisor backends are skeletons
+```
+
+The exit code distinguishes the three outcomes, so `status` is usable in a
+script: `0` ready, `2` answering but not accepting work, `1` not answering at
+all.
+
+**Alive and ready are different states**, and the gap between them is where the
+useful answers are. An engine that answers but is not ready is draining, or
+cannot write to the directory where it records work — neither of which looks
+like anything from the outside.
+
+**The contract version is checked, not assumed.** ops serves its own copy of
+pixelgo's web UI, so an engine that disagrees about the shape of the API is
+refused before anything is served, rather than discovered later on a field that
+moved.
+
+`logs` strips control characters before printing. The lines come from an agent's
+output and from pages it fetched, so a line can carry terminal escape
+sequences; pixelgo returns the record as logged, on the principle that its copy
+should be the record, and leaves the filtering to the client. `--follow` is not
+implemented yet.
+
+What `status` does not report is the VM, pending requests and the budget. The
+first needs the hypervisor backends, the second needs the approval mechanism,
+and the third needs the credential gateway — all three are skeletons, and it
+names what it cannot see rather than leaving the list quietly short.
 
 *up* takes care of everything: creates the VM, adds the virtiofs shares with
 the correct read-only flags, mounts them on the inside and starts pixelgo.
