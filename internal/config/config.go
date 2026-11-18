@@ -56,6 +56,15 @@ type Config struct {
 	// Network
 	ProxyPort int    // default: 8888
 	ProxyKind string // "tinyproxy" or "squid"
+
+	// Where pixelgo's API answers.
+	//
+	// Empty means <OpsDir>/engine.sock - see EngineSocketPath. The decided
+	// host-to-VM channel is vsock, and a unix socket is the same listener with
+	// a different address family; the socket comes first because it is a file,
+	// so ops can be developed and tested against a real pixelgo with no VM in
+	// the way. ENGINE_VSOCK_PORT belongs beside this one when that lands.
+	EngineSocket string
 }
 
 // DefaultOpsDir is where the structure lives when nothing says otherwise.
@@ -103,6 +112,22 @@ func (c *Config) AllowlistPath() string { return filepath.Join(c.OpsDir, FileAll
 // TrafficLogPath is the proxy's log, under AuditDir for the reason above.
 func (c *Config) TrafficLogPath() string { return filepath.Join(c.AuditDir(), "traffic") }
 
+// EngineSocketPath is where pixelgo's API is expected to answer.
+//
+// Derived from OpsDir rather than fixed, so that --dir moves it too: a default
+// computed once at init would still point at the old location after the
+// structure is created somewhere else.
+//
+// pixelgo has to be told the same path, with PIXELGO_UNIX_SOCKET. The two sides
+// agree by convention and nothing enforces it yet; "check" is where that
+// belongs once it can reach the engine.
+func (c *Config) EngineSocketPath() string {
+	if c.EngineSocket != "" {
+		return c.EngineSocket
+	}
+	return filepath.Join(c.OpsDir, "engine.sock")
+}
+
 // Save writes the configuration to opsDir, in the flat KEY=value form.
 func (c *Config) Save(opsDir string) error {
 	var b strings.Builder
@@ -124,6 +149,8 @@ func (c *Config) Save(opsDir string) error {
 	b.WriteString("\n")
 	write("PROXY_PORT", strconv.Itoa(c.ProxyPort))
 	write("PROXY_KIND", c.ProxyKind)
+	b.WriteString("\n")
+	write("ENGINE_SOCKET", c.EngineSocket)
 
 	return os.WriteFile(Path(opsDir), []byte(b.String()), 0o644)
 }
@@ -200,6 +227,8 @@ func (c *Config) set(key, value string) error {
 		return num(&c.ProxyPort)
 	case "PROXY_KIND":
 		c.ProxyKind = value
+	case "ENGINE_SOCKET":
+		c.EngineSocket = value
 	default:
 		return fmt.Errorf("unknown setting %q", key)
 	}

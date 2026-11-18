@@ -201,3 +201,41 @@ func write(t *testing.T, dir, content string) {
 		t.Fatalf("writing config: %v", err)
 	}
 }
+
+// The engine socket tracks OpsDir rather than being fixed at init: a default
+// computed once would still point at the old location after --dir moved the
+// structure somewhere else.
+func TestEngineSocketPathFollowsOpsDir(t *testing.T) {
+	c := Default()
+	c.OpsDir = "/somewhere/else"
+
+	if got, want := c.EngineSocketPath(), "/somewhere/else/engine.sock"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	c.EngineSocket = "/run/pixelgo/api.sock"
+	if got, want := c.EngineSocketPath(), "/run/pixelgo/api.sock"; got != want {
+		t.Errorf("an explicit setting should win: got %q, want %q", got, want)
+	}
+}
+
+// A setting written by Save must be readable by Load, or an init followed by
+// any command fails on the file init itself produced.
+func TestEngineSocketSurvivesARoundTrip(t *testing.T) {
+	dir := t.TempDir()
+
+	c := Default()
+	c.OpsDir = dir
+	c.EngineSocket = "/run/pixelgo/api.sock"
+	if err := c.Save(dir); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	back, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if back.EngineSocket != c.EngineSocket {
+		t.Errorf("got %q, want %q", back.EngineSocket, c.EngineSocket)
+	}
+}
