@@ -16,6 +16,7 @@ import (
 	"github.com/pixelgo-io/pixelgo-ops/internal/config"
 	"github.com/pixelgo-io/pixelgo-ops/internal/engine"
 	"github.com/pixelgo-io/pixelgo-ops/internal/ops"
+	"github.com/pixelgo-io/pixelgo-ops/internal/proxy"
 )
 
 const usage = `pixelgo-ops - isolated virtual machine for the pixelgo agent
@@ -337,7 +338,95 @@ func sanitize(s string) string {
 func cmdApproval(name string, args []string) error { return errNotImplemented(name) }
 
 // cmdNetwork covers allow, deny, allowed, traffic.
-func cmdNetwork(name string, args []string) error { return errNotImplemented(name) }
+func cmdNetwork(name string, args []string) error {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	dir := fs.String("dir", config.DefaultOpsDir(), "where the structure is")
+	denied := fs.Bool("denied", false, "traffic: only the refused requests")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	cfg, err := config.Load(*dir)
+	if err != nil {
+		return err
+	}
+	p := proxy.New(cfg.OpsDir, cfg.ProxyKind, cfg.ProxyPort, cfg.TrafficLogPath())
+
+	switch name {
+	case "allow", "deny":
+		rest := fs.Args()
+		if len(rest) != 1 {
+			return fmt.Errorf("%s needs exactly one domain", name)
+		}
+		if name == "allow" {
+			if err := p.Allow(rest[0]); err != nil {
+				return err
+			}
+			fmt.Printf("allowed: %s\n", rest[0])
+		} else {
+			if err := p.Deny(rest[0]); err != nil {
+				return err
+			}
+			fmt.Printf("denied: %s\n", rest[0])
+		}
+		// Said rather than assumed: whether the change took effect depends on
+		// whether anything is running to reload, and a person who is told
+		// "allowed" while the proxy is down would reasonably expect traffic to
+		// flow.
+		if _, running := p.Running(); running {
+			// "asked to", not "was": the reload is a signal, and the proxy
+			// re-reads the filter when it gets to it. Claiming it is already in
+			// force would be wrong for the second or so afterwards.
+			fmt.Println("the running proxy was asked to reload")
+		} else {
+			fmt.Println("the proxy is not running; this takes effect at the next start")
+		}
+		return nil
+
+	case "allowed":
+		domains, err := p.Allowed()
+		if err != nil {
+			return err
+		}
+		if len(domains) == 0 {
+			// The documented starting state, not a fault - so it says what it
+			// means rather than printing an empty list.
+			fmt.Println("nothing is allowed - the allowlist is empty, which is how init leaves it")
+			return nil
+		}
+		for _, d := range domains {
+			fmt.Println(d)
+		}
+		return nil
+
+	case "traffic":
+		entries, err := proxy.ReadTraffic(cfg.TrafficLogPath(), *denied)
+		if err != nil {
+			return err
+		}
+		if len(entries) == 0 {
+			if *denied {
+				fmt.Println("nothing has been refused")
+			} else {
+				fmt.Println("no traffic recorded yet")
+			}
+			return nil
+		}
+		for _, e := range entries {
+			verdict := "ok      "
+			if e.Refused {
+				verdict = "REFUSED "
+			}
+			// The host is printed through the same filter as the engine's log
+			// lines, and for the same reason: it is a name the agent chose, and
+			// it is about to be written to a terminal.
+			fmt.Printf("%-22s %s%s\n", e.Time, verdict, sanitize(e.Host))
+		}
+		return nil
+	}
+
+	return errNotImplemented(name)
+}
 
 func errNotImplemented(name string) error {
 	return fmt.Errorf("%s: not implemented", name)

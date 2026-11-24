@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 
 	"github.com/pixelgo-io/pixelgo-ops/internal/config"
+	"github.com/pixelgo-io/pixelgo-ops/internal/proxy"
 )
 
 // Result is one line of the report.
@@ -29,6 +30,17 @@ type Result struct {
 	OK      bool
 	Pending bool   // not implementable yet - neither pass nor fail
 	Remedy  string // what to do about it; empty when OK
+
+	// External marks a check about the machine rather than about the
+	// installation: whether tinyproxy is there, for instance.
+	//
+	// The distinction is not cosmetic. "The structure is complete" and "this
+	// machine can run it" are different questions with different remedies, and
+	// conflating them means a correctly installed pixelgo-ops reports itself
+	// broken on a machine that is merely missing a package. It also keeps the
+	// tests honest: a test asserting that a complete structure passes must not
+	// depend on what happens to be installed where it runs.
+	External bool
 }
 
 // Failed reports whether this result should make "check" exit non-zero.
@@ -155,18 +167,34 @@ func RunChecks(opsDir string) []Result {
 	// Proxy.Available both panic. Listing them as pending keeps the report
 	// honest - the alternative is a report that passes cleanly on a machine
 	// where nothing could actually start.
-	out = append(out,
-		Result{
-			Name:    "the hypervisor is usable",
-			Pending: true,
-			Remedy:  "not implemented yet - the KVM and Hyper-V backends are skeletons",
-		},
-		Result{
-			Name:    "the proxy is installed",
-			Pending: true,
-			Remedy:  "not implemented yet - Proxy.Available is a skeleton",
-		},
-	)
+	out = append(out, Result{
+		Name:     "the hypervisor is usable",
+		Pending:  true,
+		Remedy:   "not implemented yet - the KVM and Hyper-V backends are skeletons",
+		External: true,
+	})
+
+	// The proxy check is no longer pending, so it reports for real. It needs
+	// the configuration to know which proxy is wanted, which is why it sits
+	// after the config checks rather than with the hypervisor.
+	if dirOK {
+		if cfg, err := config.Load(opsDir); err == nil {
+			p := proxy.New(cfg.OpsDir, cfg.ProxyKind, cfg.ProxyPort, cfg.TrafficLogPath())
+			if err := p.Available(); err != nil {
+				out = append(out, Result{
+					Name:     "the proxy is installed",
+					Remedy:   err.Error(),
+					External: true,
+				})
+			} else {
+				out = append(out, Result{
+					Name:     fmt.Sprintf("%s is installed", cfg.ProxyKind),
+					OK:       true,
+					External: true,
+				})
+			}
+		}
+	}
 
 	return out
 }

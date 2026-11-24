@@ -33,9 +33,16 @@ func names(results []Result) []string {
 	return out
 }
 
+// anyFailed reports whether anything about the INSTALLATION failed.
+//
+// External results are skipped on purpose. Whether tinyproxy or nftables
+// happens to be installed is a property of the machine the tests run on, not
+// of the structure under test - and a test that counted those would pass on a
+// developer's machine and fail on a clean one, which is the opposite of what a
+// test is for. It did exactly that once.
 func anyFailed(results []Result) bool {
 	for _, r := range results {
-		if r.Failed() {
+		if r.Failed() && !r.External {
 			return true
 		}
 	}
@@ -56,10 +63,23 @@ func TestChecksPassOnACompleteStructure(t *testing.T) {
 
 	if anyFailed(results) {
 		for _, r := range results {
-			if r.Failed() {
+			if r.Failed() && !r.External {
 				t.Errorf("unexpected failure: %s - %s", r.Name, r.Remedy)
 			}
 		}
+	}
+
+	// And the external checks must be present and marked, not simply absent -
+	// a report that drops the checks it cannot make passes on a machine where
+	// nothing could start.
+	external := 0
+	for _, r := range results {
+		if r.External {
+			external++
+		}
+	}
+	if external == 0 {
+		t.Error("no check about the machine was reported at all")
 	}
 }
 

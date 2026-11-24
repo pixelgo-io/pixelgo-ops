@@ -292,11 +292,54 @@ refuse the rest, write everything to the log.
 ```
 Port 8888
 Allow 192.168.100.0/24
-FilterURLs On
-Filter /srv/pixelgo-ops/allowlist
+Filter "/srv/pixelgo-ops/proxy.filter"
+FilterType ere
 FilterDefaultDeny Yes
 LogFile "/srv/pixelgo-ops/audit/traffic"
 ```
+
+Note what `Filter` points at: **not** the allowlist. The allowlist holds
+domains, one per line, as a person writes them. *pixelgo-ops* turns each one
+into an anchored pattern and writes that to *proxy.filter*, which is what the
+proxy reads.
+
+That indirection is the difference between a whitelist and the appearance of
+one. tinyproxy's filter file holds regular expressions matched **anywhere** in
+the host unless anchored, so pointing it at a list of plain domains gives you
+this, with `github.com` as the only entry:
+
+| asked for | unanchored | anchored |
+| --- | --- | --- |
+| `github.com` | allowed | allowed |
+| `api.github.com` | allowed | allowed |
+| `notgithub.com` | **allowed** | refused |
+| `evil-github.community` | **allowed** | refused |
+| `github.com.attacker.net` | **allowed** | refused |
+
+The first two wrong rows need no wildcard at all: both contain the literal
+string `github.com`, so anyone who registers a domain with yours inside it is
+on your allowlist. The generated pattern is
+`^([a-z0-9-]+\.)*github\.com$` — the domain and its subdomains at any depth,
+and nothing else.
+
+`FilterType ere` is required rather than decorative. Without it tinyproxy uses
+basic regular expressions, in which `(`, `)` and `+` are literal characters;
+the generated patterns then match nothing and **every** request is refused,
+including the ones that should not be. That direction is at least fail-closed,
+but it presents as "the proxy is broken" with no indication why.
+
+There is no `FilterURLs`. It switches matching from the host to the whole URL,
+which tinyproxy's own manual says works only for plain HTTP because HTTPS hides
+the URL. Matching on the host is both what we want and what works for either:
+tinyproxy strips the port first, so an anchored host pattern applies to
+`CONNECT host:443` exactly as it does to a plain `GET`.
+
+Because the allowlist becomes a pattern, an entry that is not a plain domain is
+**refused** rather than escaped. A line reading `.*` would otherwise allow
+everything; escaped, it would quietly allow nothing. Only letters, digits,
+hyphens and dots are accepted, and `*.github.com` or `.github.com` are taken as
+the domain itself, since both are how people write "and its subdomains" — which
+is what the pattern does anyway.
 
 **Squid** — larger, useful if you end up wanting a package cache or rate
 limits:
@@ -323,10 +366,23 @@ pixelgo-ops traffic              # everything
 pixelgo-ops traffic --denied     # refusals only
 ```
 
+```
+Nov 18 11:24:19.467    ok      github.invalid
+Nov 18 11:24:19.485    REFUSED notgithub.invalid
+Nov 18 11:24:19.492    REFUSED evil-github.invalidate
+```
+
 The refusals are the interesting part. Not because they got anywhere — they
 did not — but because they show you where the agent's reasoning went. An
 unexpected request means its decisions took a direction you did not
 anticipate, and that is worth reading.
+
+Two details about reading it. The hostnames come from the agent, so control
+characters are stripped before anything is printed — a log line can carry
+terminal escape sequences, and the terminal is the last place to find that out.
+And the timestamp is shown as tinyproxy wrote it, without a year, because
+tinyproxy does not record one: supplying a year would be right for most of it
+and wrong either side of New Year, in a way nobody would notice.
 
 The log is also the simplest way to build the whitelist: you start with the
 minimal list, look at what was refused, add what is justified.
