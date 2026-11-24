@@ -49,6 +49,13 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # The proxy tests start the real binary and assert what its filter does
+      # with the patterns we generate. Without it installed they skip - and the
+      # thing they check is the one that failed permissive and silent once
+      # already, so skipping them here would leave it unchecked everywhere.
+      - name: install tinyproxy
+        run: sudo apt-get install -y tinyproxy
+
       # -race because the engine client runs an HTTP client over a socket and
       # the watcher will poll on a timer: both are places where a data race is
       # easy to write and almost impossible to notice by hand.

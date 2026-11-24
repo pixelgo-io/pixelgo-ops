@@ -93,7 +93,20 @@ func Init(opsDir string) error {
 
 	for _, d := range AllDirs() {
 		p := filepath.Join(opsDir, d)
-		if err := os.MkdirAll(p, 0o755); err != nil {
+
+		// audit/ is 0700, the rest 0755.
+		//
+		// It holds the record OF the agent - what it asked the proxy for, and
+		// later what it spent - which is evidence about one party kept by
+		// another. The others hold material the agent is given or produces, and
+		// nothing in them is a secret from anyone who can already read the
+		// host. 0755 on audit/ meant any local user could read the traffic log.
+		mode := os.FileMode(0o755)
+		if d == config.DirAudit {
+			mode = 0o700
+		}
+
+		if err := os.MkdirAll(p, mode); err != nil {
 			return fmt.Errorf("init: %s: %w", p, err)
 		}
 	}
