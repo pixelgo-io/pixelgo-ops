@@ -213,7 +213,7 @@ func (p *Proxy) Stop() error {
 		return ErrNotRunning
 	}
 
-	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+	if err := signalPid(pid, syscall.SIGTERM); err != nil {
 		return fmt.Errorf("signalling the proxy (pid %d): %w", pid, err)
 	}
 
@@ -226,7 +226,7 @@ func (p *Proxy) Stop() error {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	_ = syscall.Kill(pid, syscall.SIGKILL)
+	_ = signalPid(pid, syscall.SIGKILL)
 	os.Remove(p.PidPath)
 	return nil
 }
@@ -318,7 +318,7 @@ func (p *Proxy) reload() error {
 	if !ok {
 		return nil
 	}
-	if err := syscall.Kill(pid, syscall.SIGHUP); err != nil {
+	if err := signalPid(pid, syscall.SIGHUP); err != nil {
 		return fmt.Errorf("reloading the proxy (pid %d): %w", pid, err)
 	}
 	return nil
@@ -345,11 +345,6 @@ func (p *Proxy) runningPid() (int, bool) {
 		return 0, false
 	}
 	return pid, true
-}
-
-func processAlive(pid int) bool {
-	// Signal 0 checks for existence without delivering anything.
-	return syscall.Kill(pid, 0) == nil
 }
 
 // portFree reports an error if something is already listening where the proxy
