@@ -359,9 +359,14 @@ func (p *Proxy) portFree() error {
 	return ln.Close()
 }
 
-// Firewall applies the rules that block any outbound path other than the proxy.
+// The rules that block any outbound path other than the proxy are in
+// firewall.go.
 //
 // Without them, the agent could ignore the proxy and talk directly over IP.
 //
-// TODO: nftables on Linux, New-NetFirewallRule on Windows.
-func Firewall(vmNetwork string, proxyPort int) error { panic("not implemented") }
+// This was a package-level func returning an error, which could apply rules
+// and had no counterpart that took them away - so "down" would have left them
+// behind. It is a type now: Apply, Remove, Applied and Verify, because every
+// one of those turned out to be something a caller needs.
+//
+// Windows is still missing: New-NetFirewallRule, its own issue.
