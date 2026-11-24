@@ -54,7 +54,32 @@ jobs:
       # thing they check is the one that failed permissive and silent once
       # already, so skipping them here would leave it unchecked everywhere.
       - name: install tinyproxy
-        run: sudo apt-get install -y tinyproxy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tinyproxy
+
+      # The Ubuntu package ships /etc/apparmor.d/tinyproxy in enforce mode, and
+      # that profile only lets tinyproxy read a configuration under
+      # /etc/tinyproxy. We generate ours in the ops directory, so the binary
+      # starts, is refused the file, and reports:
+      #
+      #   Could not open config file "/tmp/.../proxy.conf"
+      #
+      # about a file that is plainly there. Complain mode keeps the profile
+      # loaded and still logging, so the tests can run without the runner
+      # pretending AppArmor is absent.
+      #
+      # This is a workaround for the TESTS. It is not a fix for the product:
+      # pixelgo-ops hits the same wall on any Ubuntu host with the distro
+      # package, which is its own issue.
+      - name: put the tinyproxy apparmor profile in complain mode
+        run: |
+          if [ -f /etc/apparmor.d/tinyproxy ]; then
+            sudo apt-get install -y apparmor-utils
+            sudo aa-complain /etc/apparmor.d/tinyproxy
+          else
+            echo "no tinyproxy apparmor profile on this runner"
+          fi
 
       # -race because the engine client runs an HTTP client over a socket and
       # the watcher will poll on a timer: both are places where a data race is
