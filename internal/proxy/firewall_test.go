@@ -49,7 +49,7 @@ func needsRoot(t *testing.T) {
 	}
 }
 
-// --- the generated rule set, which needs no privileges ----------------
+// --- the generated rule set ------------------------------------------
 
 func TestRulesetIsValidAndCoversBothHooks(t *testing.T) {
 	f := NewFirewall("192.168.122.0/24", 8888)
@@ -77,10 +77,24 @@ func TestRulesetIsValidAndCoversBothHooks(t *testing.T) {
 		t.Error("the chains must not have a drop policy")
 	}
 
-	if _, err := exec.LookPath("nft"); err == nil {
-		if err := nftRun(rules, "-c", "-f", "-"); err != nil {
-			t.Errorf("nft does not accept the generated rule set: %v", err)
-		}
+	// Everything above is string matching and runs anywhere. Asking nft
+	// whether it would accept the set does not: -c is a dry run in the sense
+	// that it loads nothing, but it still opens a netlink socket and
+	// initialises the cache, so without root it fails with "Operation not
+	// permitted" - a failure about the machine rather than about the rules.
+	//
+	// This was written as though -c needed no privileges, and it passed on a
+	// machine where the tests happened to run as root. CI, as the ordinary
+	// user, said otherwise. The privileged job runs this test too, so the
+	// check still happens - see the -test.run pattern in ci.yml.
+	if os.Geteuid() != 0 {
+		t.Skip("the rules were checked as strings; asking nft needs root")
+	}
+	if _, err := exec.LookPath("nft"); err != nil {
+		t.Skip("nft is not installed")
+	}
+	if err := nftRun(rules, "-c", "-f", "-"); err != nil {
+		t.Errorf("nft does not accept the generated rule set: %v", err)
 	}
 }
 
