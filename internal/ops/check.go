@@ -11,6 +11,7 @@ package ops
 // cannot run twice to see whether the change helped.
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,13 +33,13 @@ type Result struct {
 	Remedy  string // what to do about it; empty when OK
 
 	// External marks a check about the machine rather than about the
-	// installation: whether tinyproxy is there, for instance.
+	// installation: whether tinyproxy is there, whether nftables is there.
 	//
 	// The distinction is not cosmetic. "The structure is complete" and "this
 	// machine can run it" are different questions with different remedies, and
 	// conflating them means a correctly installed pixelgo-ops reports itself
 	// broken on a machine that is merely missing a package. It also keeps the
-	// tests honest: a test asserting that a complete structure passes must not
+	// tests honest: a test asserting a complete structure passes must not
 	// depend on what happens to be installed where it runs.
 	External bool
 }
@@ -191,6 +192,37 @@ func RunChecks(opsDir string) []Result {
 					Name:     fmt.Sprintf("%s is installed", cfg.ProxyKind),
 					OK:       true,
 					External: true,
+				})
+			}
+
+			// The firewall is what makes the proxy mandatory rather than
+			// advisory, so a missing nft is not a lesser problem than a
+			// missing proxy. Reported separately because the remedy differs.
+			//
+			// Only whether the tool is there. Whether rules are loaded is a
+			// question about a running system, and "check" is for before one
+			// is running.
+			fw := proxy.NewFirewall("192.168.122.0/24", cfg.ProxyPort)
+			if err := fw.Available(); err != nil {
+				if errors.Is(err, proxy.ErrNoNftables) {
+					out = append(out, Result{
+						Name:     "nftables is installed",
+						Remedy:   err.Error(),
+						External: true,
+					})
+				} else {
+					// Not root. True, and not a fault of the installation:
+					// check is meant to be safe to run as anyone.
+					out = append(out, Result{
+						Name:     "firewall rules can be applied",
+						Pending:  true,
+						Remedy:   "not checked - up needs root for this, check does not",
+						External: true,
+					})
+				}
+			} else {
+				out = append(out, Result{
+					Name: "nftables is installed", OK: true, External: true,
 				})
 			}
 		}

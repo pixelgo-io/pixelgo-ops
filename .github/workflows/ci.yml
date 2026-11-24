@@ -53,25 +53,20 @@ jobs:
       # with the patterns we generate. Without it installed they skip - and the
       # thing they check is the one that failed permissive and silent once
       # already, so skipping them here would leave it unchecked everywhere.
-      - name: install tinyproxy
+      - name: install tinyproxy and nftables
         run: |
           sudo apt-get update
-          sudo apt-get install -y tinyproxy
+          sudo apt-get install -y tinyproxy nftables
 
       # The Ubuntu package ships /etc/apparmor.d/tinyproxy in enforce mode, and
       # that profile only lets tinyproxy read a configuration under
       # /etc/tinyproxy. We generate ours in the ops directory, so the binary
-      # starts, is refused the file, and reports:
-      #
-      #   Could not open config file "/tmp/.../proxy.conf"
-      #
+      # starts, is refused the file, and reports "Could not open config file"
       # about a file that is plainly there. Complain mode keeps the profile
-      # loaded and still logging, so the tests can run without the runner
-      # pretending AppArmor is absent.
+      # loaded and still logging, so the tests can run.
       #
-      # This is a workaround for the TESTS. It is not a fix for the product:
-      # pixelgo-ops hits the same wall on any Ubuntu host with the distro
-      # package, which is its own issue.
+      # A workaround for the TESTS, not a fix for the product: pixelgo-ops hits
+      # the same wall on any Ubuntu host with the distro package.
       - name: put the tinyproxy apparmor profile in complain mode
         run: |
           if [ -f /etc/apparmor.d/tinyproxy ]; then
@@ -86,6 +81,22 @@ jobs:
       # easy to write and almost impossible to notice by hand.
       - name: go test
         run: go test ./... -race
+
+      # The firewall tests load real nftables rules and build a network
+      # namespace to ask from, so they need root and skip without it. The step
+      # above runs as the normal user, which means the one thing in this
+      # repository that fails permissive and silent would be the one thing
+      # nothing checks.
+      #
+      # The binary is compiled first and then run under sudo, rather than
+      # running `sudo go test`: that way sudo needs no Go toolchain, no module
+      # cache and no environment carried across, and the step cannot fail for
+      # reasons that have nothing to do with the test.
+      - name: build the privileged tests
+        run: go test -c ./internal/proxy/ -o /tmp/proxy.test
+
+      - name: run the privileged tests
+        run: sudo /tmp/proxy.test -test.run 'Firewall|Ruleset|ApplyTwice|RemoveIsScoped|VerifyNotices' -test.v
 
       # The only check that compiles hyperv.go at all. It is behind
       # //go:build windows, so a Linux build and the whole test suite can pass

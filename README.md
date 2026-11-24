@@ -352,9 +352,56 @@ http_access deny all
 access_log /srv/pixelgo-ops/audit/traffic
 ```
 
+### The firewall
+
 Alongside the proxy, *pixelgo-ops* also puts in firewall rules that block any
 other way out. Without them, the agent could ignore the proxy and talk
-directly over IP.
+directly over IP — it would not have to defeat the allowlist, it could open a
+socket.
+
+They live in an nftables table of our own, with **accept** policies on the
+chains, so nothing here changes the default for anyone else's traffic: only
+what these rules match is dropped, and `nft delete table inet pixelgo-ops`
+removes exactly ours and nothing else.
+
+```
+table inet pixelgo-ops {
+	chain input {
+		type filter hook input priority filter; policy accept;
+		ip saddr 192.168.122.0/24 tcp dport 8888 accept
+		ip saddr 192.168.122.0/24 drop
+	}
+	chain forward {
+		type filter hook forward priority filter; policy accept;
+		ip saddr 192.168.122.0/24 drop
+	}
+}
+```
+
+One port in, nothing else out. Both hooks, because an `input` rule alone leaves
+the VM free to route out *through* the host. And the drop rule carries no
+protocol qualifier, so it takes UDP too — including port 53. That is
+deliberate: the proxy resolves names itself for `CONNECT`, so the VM never
+needs DNS, and leaving 53 open would be both an exfiltration channel and a way
+to find out what is reachable.
+
+It assumes the guest has a **static address**. If you let the hypervisor's DHCP
+assign one, the VM needs UDP 67 to the host and these rules refuse it, so the
+machine comes up with no address at all. Which of the two it is belongs to the
+guest-image decision, not here.
+
+**One known gap, stated rather than left.** `ip saddr` is an IPv4 match: a
+packet with an IPv6 header does not match it and passes under the accept
+policy. Setting the bridge interface instead — `iifname "virbr0"` — matches
+regardless of address family and closes it, and that is what *pixelgo-ops* does
+as soon as it knows the interface name. Until the hypervisor work provides it,
+the IPv4 rules are what there is.
+
+Everything above was demonstrated against real nftables with a network
+namespace standing in for the VM, except the IPv6 gap: it follows from how
+nftables matches work, but the machine this was built on has no IPv6 at all, so
+it was reasoned and not observed. The test covers it and skips where IPv6 is
+unavailable.
 
 ### Traffic auditing
 
