@@ -14,6 +14,8 @@ there is **What it does not solve** and **Open questions**.
 - [**How it works**](#how-it-works) — why a VM, where the rules live, what the
   agent sees
   - [The structure](#the-structure) — what is on the host, what is in the VM
+  - [The guest](#the-guest) — which system runs in the VM, and how pixelgo
+    gets in
   - [Kill switch](#kill-switch--stopping-the-vm-instantly) — how you stop
     everything instantly
 - [**The network**](#the-network) — why the VM has no direct internet
@@ -211,6 +213,62 @@ The VM is something you can recreate at any time. The binary is reinstalled,
 */workspace/* lives as long as the VM's disk. If you recreate the machine from
 scratch, the project there disappears with it — so it is worth keeping in git,
 like any project.
+
+### The guest
+
+**Debian stable, from the official genericcloud qcow2 image.** Ubuntu and
+Alpine stay on the list and are not ruled out; Debian is the default because it
+is what `templates/cloud-init.yaml` was already written against, and because
+nothing in pixelgo needs anything newer than Debian stable ships.
+
+The decision is four answers, not one, and they are coupled:
+
+**The image.** The official Debian `genericcloud` qcow2 for amd64, pinned by the
+`SHA512SUMS` file Debian publishes beside it. Pinned means recorded in this
+repository, not fetched fresh each time: an image that changes under you is an
+agent environment that changes under you. `genericcloud` rather than `generic`
+because the VM boots on KVM with virtio and does not need the extra drivers.
+
+**The disk.** A qcow2 overlay on the shared base image, not a copy. Starting a
+VM then costs a few hundred kilobytes rather than a gigabyte, and `kill` throws
+the overlay away and leaves the base untouched - which is the behaviour the
+whole design wants: the agent cannot change what the next agent starts from.
+
+**How pixelgo gets in: built on the host, copied in as an ordinary dynamically
+linked binary.** Not built in the guest, and not static.
+
+Not built in the guest, because that puts a compiler and headers in the image,
+makes first boot slow, and makes the guest a build dependency - a toolchain
+upgrade in the image would then be able to change what the agent runs.
+
+Not static, because static was only ever a way to avoid needing a toolchain in
+the guest, and building on the host achieves that already. A static build here
+would mean linking libcurl and a TLS library statically; Debian's libcurl is
+built with every optional feature on, so a static link asks for fourteen
+libraries of which nine are not packaged as `.a` at all. Static only becomes
+necessary if the build distribution and the guest distribution differ. Keeping
+them the same is cheaper than making the link work.
+
+So: the host builds for the same Debian release the guest runs. The guest needs
+the libcurl **runtime** package and nothing else - no `build-essential`. The
+package name is release-specific and changed with the time64 transition, so it
+is pinned together with the release rather than copied from an older guide.
+
+**The unit.** pixelgo runs in the guest under systemd, as specified in
+pixelgo-io/pixelgo#38, from `packaging/vm/`. The unit does not start the agent
+when `rules/` is empty - the same condition `check` enforces on the host, for
+the same reason.
+
+#### What is still open
+
+Alpine remains interesting for image size and boot time, and is now known to be
+possible: the whole pixelgo tree compiles under musl, all 33 translation units,
+once `strcasestr` has a declaration in scope. It is not chosen because it would
+require the static-link work above, and because musl is a second libc to be
+right about rather than one. Revisit if boot time becomes the thing that hurts.
+
+Ubuntu remains interesting only if something needs a package Debian stable does
+not carry. Nothing does today.
 
 ### Kill switch — stopping the VM instantly
 
@@ -723,11 +781,6 @@ what can happen; the document in *rules/* covers what should happen.
 
 Not decided yet. Open an issue if you have an opinion.
 
-**How the VM is created.** A cloud image plus cloud-init would make *up* fully
-automatic — no ISO, no installer. The cost is that the guest system is the one
-from the image. The alternative is a pre-built image, which starts faster, but
-which somebody has to build and host.
-
 **The configuration format.** YAML is expected, but adds a parser. A flat
 *KEY=value* file stays easy to read with *grep* and to use from a shell.
 Command-line arguments only is the simplest and the worst for reproducibility.
@@ -747,10 +800,6 @@ sharing that offers weaker guarantees than SMB on Hyper-V or virtiofs on
 Linux. It remains to be seen whether two code paths for Windows are worth it,
 or whether Home stays officially unsupported.
 
-**The guest system.** Debian and Ubuntu are the obvious choices. Alpine would
-boot faster and smaller, but pixelgo is written in C, and the musl/glibc
-difference will matter at some point.
-
 ---
 
 ## Documentation
@@ -758,6 +807,9 @@ difference will matter at some point.
 This README covers running the infrastructure. For the framework itself — what
 pixelgo is, how workflows are defined, the API — see the
 [pixelgo repository](https://github.com/pixelgo-io/pixelgo).
+
+For booting the guest by hand the first time — the image, the overlay, the
+seed, and what to look at — see [*docs/first-boot.md*](docs/first-boot.md).
 
 For writing the document that governs the agent, see [*docs/*](docs/)
 *(work in progress)*.
