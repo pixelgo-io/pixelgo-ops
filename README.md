@@ -21,7 +21,7 @@ there is **What it does not solve** and **Open questions**.
 - [**The network**](#the-network) — why the VM has no direct internet
   - [Why a proxy](#why-a-proxy)
   - [Why a whitelist](#why-a-whitelist)
-  - [Configuring the proxy](#configuring-the-proxy) — tinyproxy or Squid
+  - [Configuring the proxy](#configuring-the-proxy) — the generated filter
   - [Traffic auditing](#traffic-auditing) — what the agent asked for
   - [What domain filtering does not cover](#what-domain-filtering-does-not-cover)
 - [**Installation**](#installation) — requirements and the five steps
@@ -399,16 +399,16 @@ hyphens and dots are accepted, and `*.github.com` or `.github.com` are taken as
 the domain itself, since both are how people write "and its subdomains" — which
 is what the pattern does anyway.
 
-**Squid** — larger, useful if you end up wanting a package cache or rate
-limits:
+**Squid is not supported.** It would be the choice if you wanted a package
+cache or rate limits, and an earlier version of this README showed a squid
+configuration here. It has been removed rather than left as a suggestion: the
+code drives tinyproxy only, and `PROXY_KIND=squid` is refused by validation —
+so a configuration copied from here would have been rejected by the tool that
+printed it.
 
-```
-acl vm src 192.168.100.0/24
-acl allowed dstdomain "/srv/pixelgo-ops/allowlist"
-http_access allow vm allowed
-http_access deny all
-access_log /srv/pixelgo-ops/audit/traffic
-```
+Adding squid is a feature, not a setting. Squid filters with `dstdomain` ACLs
+rather than regular expressions, so none of the pattern generation above
+carries over, and its log format would need a second reader for `traffic`.
 
 ### The firewall
 
@@ -784,11 +784,6 @@ Not decided yet. Open an issue if you have an opinion.
 **The configuration format.** YAML is expected, but adds a parser. A flat
 *KEY=value* file stays easy to read with *grep* and to use from a shell.
 Command-line arguments only is the simplest and the worst for reproducibility.
-
-**Which proxy.** tinyproxy is enough for whitelist plus log and is configured
-in a few lines. Squid offers more — a package cache, rate limits — but the
-configuration is bulky. It can be swapped at any time; the design does not
-depend on it.
 
 **A gate for git.** A service on the host that understands the git protocol
 would let *fetch* through and send *push* into *pending/*, instead of relying

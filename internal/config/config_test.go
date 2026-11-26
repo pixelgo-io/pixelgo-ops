@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/pixelgo-io/pixelgo-ops/internal/proxy"
 	"testing"
 )
 
@@ -38,7 +40,6 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	want.MemoryMB = 8192
 	want.WorkspaceMode = "mount"
 	want.WorkspacePath = dir
-	want.ProxyKind = "squid"
 
 	if err := want.Save(dir); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -237,5 +238,43 @@ func TestEngineSocketSurvivesARoundTrip(t *testing.T) {
 	}
 	if back.EngineSocket != c.EngineSocket {
 		t.Errorf("got %q, want %q", back.EngineSocket, c.EngineSocket)
+	}
+}
+
+// The validator must refuse a proxy the code cannot drive.
+//
+// This is the regression test for a configuration that passed validation and
+// was then refused by proxy.Available: "check" reported the setup as fine and
+// "up" failed on a value nobody had been told was wrong. The assertion is that
+// validation is where that is caught, not the proxy package.
+func TestValidateRefusesAProxyKindTheCodeCannotDrive(t *testing.T) {
+	for _, kind := range []string{"squid", "privoxy", "", "TINYPROXY"} {
+		c := Default()
+		c.OpsDir = t.TempDir()
+		c.ProxyKind = kind
+
+		err := c.Validate()
+		if err == nil {
+			t.Errorf("PROXY_KIND=%q passed validation", kind)
+			continue
+		}
+		// The message has to name what is accepted, or the person is left to
+		// guess which value they should have written.
+		if !strings.Contains(err.Error(), proxy.KindTinyproxy) {
+			t.Errorf("PROXY_KIND=%q: the error does not name the supported kind: %v",
+				kind, err)
+		}
+	}
+}
+
+// And the one kind that is implemented must pass, or the test above would be
+// satisfied by a validator that refuses everything.
+func TestValidateAcceptsTheImplementedProxyKind(t *testing.T) {
+	c := Default()
+	c.OpsDir = t.TempDir()
+	c.ProxyKind = proxy.KindTinyproxy
+
+	if err := c.Validate(); err != nil {
+		t.Errorf("PROXY_KIND=%q was refused: %v", proxy.KindTinyproxy, err)
 	}
 }
