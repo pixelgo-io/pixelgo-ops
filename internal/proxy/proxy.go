@@ -23,11 +23,18 @@ import (
 	"github.com/pixelgo-io/pixelgo-ops/templates"
 )
 
-// KindTinyproxy and KindSquid are the values ProxyKind may take.
-const (
-	KindTinyproxy = "tinyproxy"
-	KindSquid     = "squid"
-)
+// KindTinyproxy is the only value ProxyKind may take.
+//
+// There was a KindSquid beside it, for a squid backend that was planned and
+// never written. Nothing read it except a validator that then accepted a value
+// the rest of the package refuses, so it is gone: a constant for an
+// unimplemented backend is an invitation to configure one.
+//
+// Adding squid means a config template, a filter format - squid uses dstdomain
+// ACLs, not regexes, so DomainPattern does not carry over - a second log format
+// for ReadTraffic, and tests for both. That is a feature, and it should arrive
+// as one rather than as a constant somebody finds and sets.
+const KindTinyproxy = "tinyproxy"
 
 // DefaultVMNetwork is libvirt's default network. It lives here rather than in
 // the configuration because nothing creates a network yet; it moves into
@@ -40,7 +47,7 @@ const stopGrace = 3 * time.Second
 
 // Proxy is the process that runs on the host and filters the VM's traffic.
 type Proxy struct {
-	Kind      string // "tinyproxy" or "squid"
+	Kind      string // "tinyproxy"
 	Port      int
 	Allowlist string // path to the file of domains, one per line
 	LogPath   string // audit/traffic

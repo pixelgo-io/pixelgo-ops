@@ -13,6 +13,11 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	// For the set of proxy kinds. The proxy package owns which ones it can
+	// drive, so asking it is what keeps the validator and the implementation
+	// from disagreeing - which is the defect this import exists to prevent.
+	"github.com/pixelgo-io/pixelgo-ops/internal/proxy"
 )
 
 // FileName is the configuration file inside OpsDir.
@@ -55,7 +60,7 @@ type Config struct {
 
 	// Network
 	ProxyPort int    // default: 8888
-	ProxyKind string // "tinyproxy" or "squid"
+	ProxyKind string // "tinyproxy" - the only proxy the code can drive
 
 	// Where pixelgo's API answers.
 	//
@@ -292,10 +297,19 @@ func (c *Config) Validate() error {
 	if c.ProxyPort < 1 || c.ProxyPort > 65535 {
 		return fmt.Errorf("PROXY_PORT is %d, outside 1-65535", c.ProxyPort)
 	}
+	// Only the kinds the proxy package can actually drive.
+	//
+	// This accepted "squid" as well for a while, because squid was planned.
+	// The result was a configuration that passed validation and was then
+	// refused by proxy.Available - so "check" told a person their setup was
+	// fine and "up" disagreed, about a value nobody had told them was wrong.
+	// A validator that accepts what the code rejects is worse than one that is
+	// narrow: it moves the error to a later command and a different message.
 	switch c.ProxyKind {
-	case "tinyproxy", "squid":
+	case proxy.KindTinyproxy:
 	default:
-		return fmt.Errorf("PROXY_KIND is %q, expected \"tinyproxy\" or \"squid\"", c.ProxyKind)
+		return fmt.Errorf("PROXY_KIND is %q, expected %q",
+			c.ProxyKind, proxy.KindTinyproxy)
 	}
 
 	return nil
