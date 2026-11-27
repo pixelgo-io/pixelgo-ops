@@ -198,7 +198,10 @@ func (p *Proxy) Start() error {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return fmt.Errorf("%s did not start: %s", p.Kind, msg)
+		// "Could not open config file" about a file we just wrote and can
+		// still read is the signature of a confinement, not of a missing
+		// file. See confinement.go.
+		return fmt.Errorf("%s did not start: %s", p.Kind, p.explainOpenFailure(msg))
 	}
 
 	// It daemonises, so a successful exit does not mean it is listening yet.

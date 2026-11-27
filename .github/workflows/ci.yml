@@ -96,7 +96,7 @@ jobs:
         run: go test -c ./internal/proxy/ -o /tmp/proxy.test
 
       - name: run the privileged tests
-        run: sudo /tmp/proxy.test -test.run 'Firewall|Ruleset|ApplyTwice|RemoveIsScoped|VerifyNotices' -test.v
+        run: sudo /tmp/proxy.test -test.run 'Firewall|Ruleset|ApplyTwice|RemoveIsScoped|VerifyNotices|ARealRefusal' -test.v
 
       # The only check that compiles hyperv.go at all. It is behind
       # //go:build windows, so a Linux build and the whole test suite can pass

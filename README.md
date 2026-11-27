@@ -567,6 +567,25 @@ systemctl is-active libvirtd     # must be: active
 virsh list --all                 # must run without a permissions error
 ```
 
+**On Ubuntu, the proxy may need one more step.** The tinyproxy package ships
+`/etc/apparmor.d/tinyproxy`, and that profile normally lets tinyproxy read a
+configuration only under `/etc/tinyproxy`. *pixelgo-ops* generates its
+configuration in the ops directory, because it is derived from the allowlist
+and rewritten on every `allow`. Under an enforcing profile the proxy starts,
+the kernel refuses it the file, and tinyproxy reports that it could not open a
+file that is plainly there.
+
+`check` reports this as its own line when it sees such a profile, and `up`
+explains it if it happens. The fix is a local override, which survives package
+upgrades in a way that editing the profile does not:
+
+```bash
+echo '  owner ~/.pixelgo-ops/** r,' | sudo tee -a /etc/apparmor.d/local/tinyproxy
+sudo apparmor_parser -r /etc/apparmor.d/tinyproxy
+```
+
+Use the real path, not `~` — AppArmor does not expand it.
+
 **Windows**
 
 Hyper-V, enabled from PowerShell as administrator:
