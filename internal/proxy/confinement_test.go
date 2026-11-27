@@ -262,10 +262,42 @@ func TestARealRefusalIsRecognised(t *testing.T) {
 	p := testProxy(t)
 	writeFile(t, p.ConfigPath, "Port 8888\nFilter \"/dev/null\"\n")
 
-	// Readable by root, unreadable by anyone else - and the directory too, or
-	// the failure would be about the path rather than the file.
+	// The denial has to be about the FILE, not about the path to it.
+	//
+	// Under sudo, t.TempDir gives a directory owned by root with mode 0700, so
+	// an unprivileged proxy cannot even traverse it. A traversal denial
+	// produces the same "Could not open config file" message, which means the
+	// test would pass while measuring something else entirely.
+	//
+	// So exactly two directories are opened, named one at a time: the
+	// directory t.TempDir returned, and the per-test directory above it that
+	// the testing package created. NOT A LOOP UP THE TREE. The first version
+	// of this walked parents until Chmod failed, and running as root it did
+	// not fail at /tmp - it set /tmp to 0755, dropped the sticky bit, and
+	// every later step in the job that wanted a temporary file was refused.
+	// A test that runs as root has to name what it changes.
+	dir := filepath.Dir(p.ConfigPath)
+	parent := filepath.Dir(dir)
+	if parent == os.TempDir() || dir == os.TempDir() {
+		t.Fatalf("refusing to touch %s: TempDir returned something unexpected (%s)",
+			os.TempDir(), dir)
+	}
+	for _, d := range []string{parent, dir} {
+		if err := os.Chmod(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.Chmod(p.ConfigPath, 0o000); err != nil {
 		t.Fatal(err)
+	}
+
+	// Prove the setup before trusting the result: the directory is traversable
+	// and only the file is closed.
+	if out, err := exec.Command("setpriv",
+		"--reuid=65534", "--regid=65534", "--clear-groups",
+		"test", "-x", filepath.Dir(p.ConfigPath)).CombinedOutput(); err != nil {
+		t.Fatalf("the directory is still not traversable by the unprivileged user: %v %s",
+			err, out)
 	}
 
 	out, err := exec.Command("setpriv",
