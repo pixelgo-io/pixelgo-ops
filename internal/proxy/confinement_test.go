@@ -262,10 +262,29 @@ func TestARealRefusalIsRecognised(t *testing.T) {
 	p := testProxy(t)
 	writeFile(t, p.ConfigPath, "Port 8888\nFilter \"/dev/null\"\n")
 
-	// Readable by root, unreadable by anyone else - and the directory too, or
-	// the failure would be about the path rather than the file.
+	// The denial has to be about the FILE, not about the path to it.
+	//
+	// Under sudo, t.TempDir gives a directory owned by root with mode 0700, so
+	// an unprivileged proxy cannot even traverse it. That produces the same
+	// message, which means the test would pass while measuring something else.
+	// Opening the directories and closing the file is what makes the refusal
+	// specific.
+	for d := filepath.Dir(p.ConfigPath); len(d) > 1; d = filepath.Dir(d) {
+		if err := os.Chmod(d, 0o755); err != nil {
+			break // above the temporary tree; nothing to open there
+		}
+	}
 	if err := os.Chmod(p.ConfigPath, 0o000); err != nil {
 		t.Fatal(err)
+	}
+
+	// Prove the setup before trusting the result: the directory is traversable
+	// and only the file is closed.
+	if out, err := exec.Command("setpriv",
+		"--reuid=65534", "--regid=65534", "--clear-groups",
+		"test", "-x", filepath.Dir(p.ConfigPath)).CombinedOutput(); err != nil {
+		t.Fatalf("the directory is still not traversable by the unprivileged user: %v %s",
+			err, out)
 	}
 
 	out, err := exec.Command("setpriv",
