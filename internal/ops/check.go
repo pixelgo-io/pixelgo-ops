@@ -193,6 +193,34 @@ func RunChecks(opsDir string) []Result {
 					OK:       true,
 					External: true,
 				})
+
+				// Installed is not the same as able to start.
+				//
+				// On Ubuntu the package ships an apparmor profile that
+				// permits a configuration only under its own directory,
+				// while we generate ours in the ops directory. The proxy
+				// then starts, is refused the file by the kernel, and
+				// reports that it could not open a file that is plainly
+				// there - so a person who ran "check" and saw a green line
+				// has been told the opposite of what happens next.
+				//
+				// Reported, not failed. Whether the profile would actually
+				// stop us needs its mode, and that file is root-only, while
+				// check is meant to be safe to run as anyone. Refusing on a
+				// guess would break installations that are fine.
+				if c := p.Confinement(); c.Suspect() {
+					out = append(out, Result{
+						Name:    "the proxy can read a generated configuration",
+						Pending: true,
+						Remedy: fmt.Sprintf(
+							"%s exists, so %s may be refused a configuration outside it.\n"+
+								"      Not checked: that needs the profile's mode, which only root can read.\n"+
+								"      %s",
+							c.ProfilePath, cfg.ProxyKind,
+							proxy.IndentLines(c.Remedy(filepath.Dir(p.ConfigPath)), "      ")),
+						External: true,
+					})
+				}
 			}
 
 			// The firewall is what makes the proxy mandatory rather than
